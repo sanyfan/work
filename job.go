@@ -158,6 +158,23 @@ func (j *Job) ArgError() error {
 	return j.argError
 }
 
+// IsScheduled returns true, if current job is ran for the first time as scheduled.
+// Return false, if current run is a rerun or not a scheduled job.
+func (j *Job) IsScheduled() bool {
+	if j.Fails == 0 && j.ScheduledAt > 0 {
+		return true
+	}
+	return false
+}
+
+// IsRerun returns true, if current job is a rerun.
+func (j *Job) IsRerun() bool {
+	if j.Fails > 0 {
+		return true
+	}
+	return false
+}
+
 func isIntKind(v reflect.Value) bool {
 	k := v.Kind()
 	return k == reflect.Int || k == reflect.Int8 || k == reflect.Int16 || k == reflect.Int32 || k == reflect.Int64
