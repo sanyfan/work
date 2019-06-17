@@ -26,6 +26,7 @@ class App extends React.Component {
           <aside className={styles.colMd2}>
             <nav>
               <ul className={cx(styles.nav, styles.navPills, styles.navStacked)}>
+                <li>Namespace: <input placeholder="NameSpace"/></li>
                 <li><Link to="/processes">Processes</Link></li>
                 <li><Link to="/queues">Queues</Link></li>
                 <li><Link to="/retry_jobs">Retry Jobs</Link></li>

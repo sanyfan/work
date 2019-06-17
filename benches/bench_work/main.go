@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gocraft/health"
-	"github.com/vaporz/work"
+	"github.com/sanyfan/work"
 	"os"
 	"sync/atomic"
 	"time"

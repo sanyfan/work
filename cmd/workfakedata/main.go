@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
-	"github.com/vaporz/work"
+	"github.com/sanyfan/work"
 	"math/rand"
 	"time"
 )

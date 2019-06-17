@@ -10,8 +10,8 @@ import (
 	"github.com/braintree/manners"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gocraft/web"
-	"github.com/vaporz/work"
-	"github.com/vaporz/work/webui/internal/assets"
+	"github.com/sanyfan/work"
+	"./internal/assets"
 )
 
 // Server implements an HTTP server which exposes a JSON API to view and manage gocraft/work items.
@@ -59,6 +59,7 @@ func NewServer(namespace string, pool *redis.Pool, hostPort string) *Server {
 	router.Post("/retry_dead_job/:died_at:\\d.*/:job_id", (*context).retryDeadJob)
 	router.Post("/delete_all_dead_jobs", (*context).deleteAllDeadJobs)
 	router.Post("/retry_all_dead_jobs", (*context).retryAllDeadJobs)
+	router.Post("/change_namespace", (*context).changeNamespace)
 
 	//
 	// Build the HTML page:
@@ -189,6 +190,18 @@ func (c *context) deleteDeadJob(rw web.ResponseWriter, r *web.Request) {
 	}
 
 	err = c.client.DeleteDeadJob(diedAt, r.PathParams["job_id"])
+
+	render(rw, map[string]string{"status": "ok"}, err)
+}
+
+func (c *context) changeNamespace(rw web.ResponseWriter, r *web.Request) {
+	ns, err := json.Marshal(r.PathParams["ns"])
+	if err != nil {
+		renderError(rw, err)
+		return
+	}
+
+	c.client = work.NewClient(string(ns), c.pool)
 
 	render(rw, map[string]string{"status": "ok"}, err)
 }

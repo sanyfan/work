@@ -122,7 +122,7 @@ export default class Processes extends React.Component {
                         <td colSpan="4">Servicing <ShortList item={pool.job_names} />.</td>
                       </tr>
                       <tr>
-                        <td colSpan="4">{busyWorker.length} active worker(s) and {pool.worker_ids.length - busyWorker.length} idle.</td>
+                        <td colSpan="4">{busyWorker.length} active ssssssworker(s) and {pool.worker_ids.length - busyWorker.length} idle.</td>
                       </tr>
                       <tr>
                         <td colSpan="4">
