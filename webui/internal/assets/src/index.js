@@ -10,8 +10,28 @@ import styles from './bootstrap.min.css';
 import cx from './cx';
 
 class App extends React.Component {
+
+  constructor(props) {
+    super(props);
+    this.state = {
+      NsValue: ''
+    };
+  }
+
   static propTypes = {
     children: React.PropTypes.element.isRequired,
+  }
+
+
+  changeNamespace() {
+    let ns = this.state.NsValue
+    localStorage.setItem('ns', ns)
+    fetch(`/change_namespace/${ns}`, { method: 'post' }).then(() => {
+      location.reload()
+    })
+  }
+  changeInput(v) {
+    this.setState({ NsValue: v.target.value })
   }
 
   render() {
@@ -26,7 +46,8 @@ class App extends React.Component {
           <aside className={styles.colMd2}>
             <nav>
               <ul className={cx(styles.nav, styles.navPills, styles.navStacked)}>
-                <li>Namespace: <input placeholder="NameSpace"/></li>
+                <li>Namespace:  {localStorage.getItem('ns')}</li>
+                <li><input placeholder="NameSpace" value={this.state.NsValue} onChange={v=>this.changeInput(v)}/> <button onClick={v=>this.changeNamespace()}>Reload</button></li>
                 <li><Link to="/processes">Processes</Link></li>
                 <li><Link to="/queues">Queues</Link></li>
                 <li><Link to="/retry_jobs">Retry Jobs</Link></li>

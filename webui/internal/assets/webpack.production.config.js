@@ -21,21 +21,19 @@ module.exports = {
     })
   ],
   module: {
-    loaders: [
-      {
-        test: /\.js$/,
-        loader: 'babel',
-        exclude: /node_modules/,
-      },
-      {
-        test: /\.css$/,
-        loader: 'style!css?modules&camelCase&-url&localIdentName=[hash:base64:5]-[local]'
-      },
-      {
-        test: /\.(png|woff|woff2|eot|ttf|svg)(\?[#a-z_]+)?$/,
-        loader: 'url'
-      }
+    loaders: [{
+      test: /\.js$/,
+      loader: 'babel-loader',
+      exclude: /node_modules/,
+    },
+    {
+      test: /\.css$/,
+      loader: 'style-loader!css-loader?modules&camelCase&-url&localIdentName=[hash:base64:5]-[local]'
+    },
+    {
+      test: /\.(png|woff|woff2|eot|ttf|svg)(\?[#a-z_]+)?$/,
+      loader: 'url-loader'
+    }
     ]
   }
 };
-

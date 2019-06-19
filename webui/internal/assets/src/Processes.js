@@ -31,7 +31,7 @@ class BusyWorkers extends React.Component {
                     <td><UnixTime ts={worker.checkin_at}/></td>
                     <td>{worker.checkin}</td>
                   </tr>
-                  );
+                );
               })
             }
           </tbody>
@@ -135,7 +135,7 @@ export default class Processes extends React.Component {
                   </table>
                 </div>
               </div>
-              );
+            );
           })
         }
       </section>

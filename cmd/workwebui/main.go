@@ -10,7 +10,7 @@ import (
 	"errors"
 	"github.com/FZambia/go-sentinel"
 	"github.com/garyburd/redigo/redis"
-	"github.com/sanyfan/work/webui"
+	"../../../work/webui"
 	"strings"
 )
 

@@ -10,7 +10,7 @@ import (
 	"github.com/braintree/manners"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gocraft/web"
-	"github.com/sanyfan/work"
+	"../../work"
 	"./internal/assets"
 )
 
@@ -59,7 +59,7 @@ func NewServer(namespace string, pool *redis.Pool, hostPort string) *Server {
 	router.Post("/retry_dead_job/:died_at:\\d.*/:job_id", (*context).retryDeadJob)
 	router.Post("/delete_all_dead_jobs", (*context).deleteAllDeadJobs)
 	router.Post("/retry_all_dead_jobs", (*context).retryAllDeadJobs)
-	router.Post("/change_namespace", (*context).changeNamespace)
+	router.Post("/change_namespace/:ns", (*context).changeNamespace)
 
 	//
 	// Build the HTML page:
@@ -195,15 +195,11 @@ func (c *context) deleteDeadJob(rw web.ResponseWriter, r *web.Request) {
 }
 
 func (c *context) changeNamespace(rw web.ResponseWriter, r *web.Request) {
-	ns, err := json.Marshal(r.PathParams["ns"])
-	if err != nil {
-		renderError(rw, err)
-		return
-	}
+	ns := fmt.Sprint(r.PathParams["ns"])
 
 	c.client = work.NewClient(string(ns), c.pool)
 
-	render(rw, map[string]string{"status": "ok"}, err)
+	render(rw, map[string]string{"status": "ok"},nil)
 }
 
 func (c *context) retryDeadJob(rw web.ResponseWriter, r *web.Request) {
