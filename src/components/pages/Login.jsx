@@ -32,9 +32,6 @@ class Login extends React.Component {
             }
         });
     };
-    gitHub = () => {
-        window.location.href = 'https://github.com/login/oauth/authorize?client_id=792cdcd244e98dcd2dee&redirect_uri=http://localhost:3006/&scope=user&state=reactAdmin';
-    };
     render() {
         const { getFieldDecorator } = this.props.form;
         return (
@@ -49,14 +46,14 @@ class Login extends React.Component {
                             {getFieldDecorator('userName', {
                                 rules: [{ required: true, message: '请输入用户名!' }],
                             })(
-                                <Input prefix={<Icon type="user" style={{ fontSize: 13 }} />} placeholder="管理员输入admin, 游客输入guest" />
+                                <Input prefix={<Icon type="user" style={{ fontSize: 13 }} />} placeholder="游客输入guest" />
                             )}
                         </FormItem>
                         <FormItem>
                             {getFieldDecorator('password', {
                                 rules: [{ required: true, message: '请输入密码!' }],
                             })(
-                                <Input prefix={<Icon type="lock" style={{ fontSize: 13 }} />} type="password" placeholder="管理员输入admin, 游客输入guest" />
+                                <Input prefix={<Icon type="lock" style={{ fontSize: 13 }} />} type="password" placeholder="游客输入guest" />
                             )}
                         </FormItem>
                         <FormItem>
@@ -70,10 +67,6 @@ class Login extends React.Component {
                             <Button type="primary" htmlType="submit" className="login-form-button" style={{width: '100%'}}>
                                 登录
                             </Button>
-                            <p style={{display: 'flex', justifyContent: 'space-between'}}>
-                                <span >或 现在就去注册!</span>
-                                <span onClick={this.gitHub} ><Icon type="github" />(第三方登录)</span>
-                            </p>
                         </FormItem>
                     </Form>
                 </div>
