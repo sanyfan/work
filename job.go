@@ -16,12 +16,11 @@ type Job struct {
 	Args        map[string]interface{} `json:"args"`
 	Unique      bool                   `json:"unique,omitempty"`
 	ScheduledAt int64                  `json:"s"`
-
 	// Inputs when retrying
-	Fails    int64  `json:"fails,omitempty"` // number of times this job has failed
-	LastErr  string `json:"err,omitempty"`
-	FailedAt int64  `json:"failed_at,omitempty"`
-
+	Fails        int64  `json:"fails,omitempty"` // number of times this job has failed
+	LastErr      string `json:"err,omitempty"`
+	FailedAt     int64  `json:"failed_at,omitempty"`
+	Success      bool   `json:"success,omitempty"`
 	rawJSON      []byte
 	dequeuedFrom []byte
 	inProgQueue  []byte

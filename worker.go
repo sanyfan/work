@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"time"
 
+	"errors"
 	"github.com/garyburd/redigo/redis"
 )
 
@@ -18,6 +19,7 @@ type worker struct {
 	pool        *redis.Pool
 	jobTypes    map[string]*jobType
 	middleware  []*middlewareHandler
+	hook        []*middlewareHandler
 	contextType reflect.Type
 
 	redisFetchScript *redis.Script
@@ -29,9 +31,12 @@ type worker struct {
 
 	drainChan        chan struct{}
 	doneDrainingChan chan struct{}
+
+	clearChan        chan struct{}
+	doneClearingChan chan struct{}
 }
 
-func newWorker(namespace string, poolID string, pool *redis.Pool, contextType reflect.Type, middleware []*middlewareHandler, jobTypes map[string]*jobType) *worker {
+func newWorker(namespace string, poolID string, pool *redis.Pool, contextType reflect.Type, middleware, hook []*middlewareHandler, jobTypes map[string]*jobType) *worker {
 	workerID := makeIdentifier()
 	ob := newObserver(namespace, pool, workerID)
 
@@ -49,16 +54,24 @@ func newWorker(namespace string, poolID string, pool *redis.Pool, contextType re
 
 		drainChan:        make(chan struct{}),
 		doneDrainingChan: make(chan struct{}),
+
+		clearChan:        make(chan struct{}),
+		doneClearingChan: make(chan struct{}),
 	}
 
-	w.updateMiddlewareAndJobTypes(middleware, jobTypes)
+	w.updateMiddlewareAndJobTypes(middleware, hook, jobTypes)
 
 	return w
 }
 
 // note: can't be called while the thing is started
-func (w *worker) updateMiddlewareAndJobTypes(middleware []*middlewareHandler, jobTypes map[string]*jobType) {
-	w.middleware = middleware
+func (w *worker) updateMiddlewareAndJobTypes(middleware, hook []*middlewareHandler, jobTypes map[string]*jobType) {
+	if middleware != nil {
+		w.middleware = middleware
+	}
+	if hook != nil {
+		w.hook = hook
+	}
 	sampler := prioritySampler{}
 	for _, jt := range jobTypes {
 		sampler.add(jt.Priority,
@@ -90,6 +103,11 @@ func (w *worker) drain() {
 	w.drainChan <- struct{}{}
 	<-w.doneDrainingChan
 	w.observer.drain()
+}
+
+func (w *worker) ClearWorker() {
+	w.clearChan <- struct{}{}
+	<-w.doneStoppingChan
 }
 
 var sleepBackoffsInMilliseconds = []int64{0, 10, 100, 1000, 5000}
@@ -194,18 +212,50 @@ func (w *worker) processJob(job *Job) {
 			w.removeJobFromInProgress(job)
 			return
 		}
+		timeout := time.Duration(jt.Timeout) * time.Millisecond
+		if timeout <= 0 {
+			timeout = time.Minute * 1440 * 14
+		}
 		w.observeStarted(job.Name, job.ID, job.Args)
 		job.observer = w.observer // for Checkin
 		middleware := append(w.middleware, jt.middleware...)
-		_, runErr := runJob(job, w.contextType, middleware, jt)
+		hook := append(w.hook, jt.hook...)
+		var runErr error
+		chErr := make(chan error)
+		chCtx := make(chan reflect.Value)
+		go func() {
+			ctx, err := runJob(job, w.contextType, middleware, jt)
+			chErr <- err
+			chCtx <- ctx
+		}()
+		select {
+		case <-time.After(timeout):
+			if timeout > 0 {
+				fmt.Printf("Job %s Timeout", job.Name)
+				runErr = errors.New("Run Job Timeout")
+				break
+			}
+		case runErr = <-chErr:
+			ctx := <-chCtx
+			if runErr != nil {
+				job.Success = false
+			} else {
+				job.Success = true
+			}
+			runHook(job, ctx, hook)
+			break
+		case <-w.clearChan:
+			w.doneStoppingChan <- struct{}{}
+			break
+		}
 		w.observeDone(job.Name, job.ID, runErr)
-
 		if runErr != nil {
 			job.failed(runErr)
 			w.addToRetryOrDead(jt, job, runErr)
 		} else {
 			w.removeJobFromInProgress(job)
 		}
+
 	} else {
 		// NOTE: since we don't have a jobType, we don't know max retries
 		runErr := fmt.Errorf("stray job: no handler")

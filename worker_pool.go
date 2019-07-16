@@ -1,6 +1,7 @@
 package work
 
 import (
+	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"github.com/robfig/cron"
 	"reflect"
@@ -19,6 +20,7 @@ type WorkerPool struct {
 	contextType  reflect.Type
 	jobTypes     map[string]*jobType
 	middleware   []*middlewareHandler
+	hook         []*middlewareHandler
 	started      bool
 	periodicJobs []*periodicJob
 
@@ -38,6 +40,7 @@ type jobType struct {
 	GenericHandler GenericHandler
 	DynamicHandler reflect.Value
 	middleware     []*middlewareHandler
+	hook           []*middlewareHandler
 }
 
 // You may provide your own backoff function for retrying failed jobs or use the builtin one.
@@ -55,6 +58,7 @@ type JobOptions struct {
 	Backoff          BackoffCalculator // If not set, uses the default backoff algorithm
 	StartingDeadline int64             // UTC time in seconds(time.Now().Unix()), the deadline for starting the job if it misses its scheduled time for any reason
 	RetryOnStart     bool              // If true, when a worker pool is started, jobs that are "in progress" will be retried
+	Timeout          int
 }
 
 // GenericHandler is a job handler without any custom context.
@@ -91,11 +95,21 @@ func NewWorkerPool(ctx interface{}, concurrency uint, namespace string, pool *re
 	}
 
 	for i := uint(0); i < wp.concurrency; i++ {
-		w := newWorker(wp.namespace, wp.workerPoolID, wp.pool, wp.contextType, nil, wp.jobTypes)
+		w := newWorker(wp.namespace, wp.workerPoolID, wp.pool, wp.contextType, nil, nil, wp.jobTypes)
 		wp.workers = append(wp.workers, w)
 	}
-
+	wp.Job(fmt.Sprintf("%s:$s", "WorkerDrain", wp.workerPoolID), wp.workerDrain)
 	return wp
+}
+
+func (wp *WorkerPool) workerDrain(job *Job) error {
+	workerID := fmt.Sprint(job.Args["worker_id"])
+	for _, v := range wp.workers {
+		if v.workerID == workerID {
+			v.drain()
+		}
+	}
+	return nil
 }
 
 // Middleware appends the specified function to the middleware chain. The fn can take one of these forms:
@@ -112,7 +126,27 @@ func (wp *WorkerPool) Middlewares(fns []interface{}) *WorkerPool {
 	wp.middleware = funcToMiddleware(fns, wp.contextType)
 
 	for _, w := range wp.workers {
-		w.updateMiddlewareAndJobTypes(wp.middleware, wp.jobTypes)
+		w.updateMiddlewareAndJobTypes(wp.middleware, nil, wp.jobTypes)
+	}
+
+	return wp
+}
+
+// Middleware appends the specified function to the middleware chain. The fn can take one of these forms:
+// (*ContextType).func(*Job, NextMiddlewareFunc) error, (ContextType matches the type of ctx specified when creating a pool)
+// func(*Job, NextMiddlewareFunc) error, for the generic middleware format.
+func (wp *WorkerPool) Hook(fn interface{}) *WorkerPool {
+	return wp.Hooks([]interface{}{fn})
+}
+
+// Middlewares appends the specified functions to the middleware chain. The fn in fns can take one of these forms:
+// (*ContextType).func(*Job, NextMiddlewareFunc) error, (ContextType matches the type of ctx specified when creating a pool)
+// func(*Job, NextMiddlewareFunc) error, for the generic middleware format.
+func (wp *WorkerPool) Hooks(fns []interface{}) *WorkerPool {
+	wp.hook = funcToMiddleware(fns, wp.contextType)
+
+	for _, w := range wp.workers {
+		w.updateMiddlewareAndJobTypes(nil, wp.hook, wp.jobTypes)
 	}
 
 	return wp
@@ -123,35 +157,37 @@ func (wp *WorkerPool) Middlewares(fns []interface{}) *WorkerPool {
 // (*ContextType).func(*Job) error, (ContextType matches the type of ctx specified when creating a pool)
 // func(*Job) error, for the generic handler format.
 func (wp *WorkerPool) Job(name string, fn interface{}) *WorkerPool {
-	return wp.JobWithOptionsAndMiddlewares(name, JobOptions{}, fn, []interface{}{})
+	return wp.JobWithOptionsAndMiddlewares(name, JobOptions{}, fn, []interface{}{}, []interface{}{})
 }
 
 // JobWithOptions adds a handler for 'name' jobs as per the Job function, but permits you specify additional options
 // such as a job's priority, retry count, and whether to send dead jobs to the dead job queue or trash them.
 func (wp *WorkerPool) JobWithOptions(name string, jobOpts JobOptions, fn interface{}) *WorkerPool {
-	return wp.JobWithOptionsAndMiddlewares(name, jobOpts, fn, []interface{}{})
+	return wp.JobWithOptionsAndMiddlewares(name, jobOpts, fn, []interface{}{}, []interface{}{})
 }
 
 // JobWithMiddlewares adds middlewares for 'name' jobs as per the Job specified middlware chain
-func (wp *WorkerPool) JobWithMiddlewares(name string, fn interface{}, fns []interface{}) *WorkerPool {
-	return wp.JobWithOptionsAndMiddlewares(name, JobOptions{}, fn, fns)
+func (wp *WorkerPool) JobWithMiddlewares(name string, fn interface{}, fns, hks []interface{}) *WorkerPool {
+	return wp.JobWithOptionsAndMiddlewares(name, JobOptions{}, fn, fns, hks)
 }
 
 // JobWithOptionsAndMiddlewares adds a handler for 'name' jobs as per the Job function, but permits you specify additional options
 // such as a job's priority, retry count, and whether to send dead jobs to the dead job queue or trash them.
 // And adds middlewares for 'name' jobs as per the Job specified middlware chain
-func (wp *WorkerPool) JobWithOptionsAndMiddlewares(name string, jobOpts JobOptions, fn interface{}, fns []interface{}) *WorkerPool {
+func (wp *WorkerPool) JobWithOptionsAndMiddlewares(name string, jobOpts JobOptions, fn interface{}, fns, hks []interface{}) *WorkerPool {
 	jobOpts = applyDefaultsAndValidate(jobOpts)
 
 	vfn := reflect.ValueOf(fn)
 	validateHandlerType(wp.contextType, vfn)
 	jobMiddleware := funcToMiddleware(fns, wp.contextType)
+	hookMiddleware := funcToMiddleware(hks, wp.contextType)
 
 	jt := &jobType{
 		Name:           name,
 		DynamicHandler: vfn,
 		JobOptions:     jobOpts,
 		middleware:     jobMiddleware,
+		hook:           hookMiddleware,
 	}
 	if gh, ok := fn.(func(*Job) error); ok {
 		jt.IsGeneric = true
@@ -161,7 +197,7 @@ func (wp *WorkerPool) JobWithOptionsAndMiddlewares(name string, jobOpts JobOptio
 	wp.jobTypes[name] = jt
 
 	for _, w := range wp.workers {
-		w.updateMiddlewareAndJobTypes(wp.middleware, wp.jobTypes)
+		w.updateMiddlewareAndJobTypes(wp.middleware, wp.hook, wp.jobTypes)
 	}
 
 	return wp

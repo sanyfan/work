@@ -2,10 +2,12 @@ package work
 
 import (
 	"fmt"
-	"github.com/garyburd/redigo/redis"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/garyburd/redigo/redis"
+	"github.com/sanyfan/work"
 )
 
 // ErrNotDeleted is returned by functions that delete jobs to indicate that although the redis commands were successful,
@@ -20,6 +22,7 @@ var ErrNotRetried = fmt.Errorf("nothing retried")
 type Client struct {
 	namespace string
 	pool      *redis.Pool
+	enqueuer  *work.Enqueuer
 }
 
 // NewClient creates a new Client with the specified redis namespace and connection pool.
@@ -27,6 +30,7 @@ func NewClient(namespace string, pool *redis.Pool) *Client {
 	return &Client{
 		namespace: namespace,
 		pool:      pool,
+		enqueuer:  work.NewEnqueuer(namespace, pool),
 	}
 }
 
@@ -128,6 +132,17 @@ type WorkerObservation struct {
 	ArgsJSON  string `json:"args_json"`
 	Checkin   string `json:"checkin"`
 	CheckinAt int64  `json:"checkin_at"`
+}
+
+// DrainDeadWorker deletes a dead job from Redis.
+func (c *Client) DrainDeadWorker(workerPoolID, workerID string) error {
+	_, err := c.enqueuer.Enqueue(fmt.Sprintf("%s:%s", "WorkerDrain", workerPoolID), map[string]interface{}{"worker_id": workerID})
+	return err
+}
+
+// ChangeNamespace deletes a dead job from Redis.
+func (c *Client) ChangeNamespace(ns string) {
+	c.namespace = ns
 }
 
 // WorkerObservations returns all of the WorkerObservation's it finds for all worker pools' workers.
@@ -401,6 +416,11 @@ func (c *Client) RetryDeadJob(diedAt int64, jobID string) error {
 	if cnt == 0 {
 		return ErrNotRetried
 	}
+
+	return nil
+}
+
+func (c *Client) StopWorker() error {
 
 	return nil
 }
