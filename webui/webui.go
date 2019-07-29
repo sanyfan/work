@@ -11,7 +11,7 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"github.com/gocraft/web"
 	"github.com/sanyfan/work"
-	"github.com/sanyfan/work/webui/internal/assets/src"
+	"github.com/sanyfan/work/webui/internal/assets"
 )
 
 // Server implements an HTTP server which exposes a JSON API to view and manage gocraft/work items.
@@ -29,6 +29,8 @@ type context struct {
 	*Server
 }
 
+var enqueuer *work.Enqueuer
+
 // NewServer creates and returns a new server. The 'namespace' param is the redis namespace to use. The hostPort param is the address to bind on to expose the API.
 func NewServer(namespace string, pool *redis.Pool, hostPort string) *Server {
 	router := web.New(context{})
@@ -45,6 +47,12 @@ func NewServer(namespace string, pool *redis.Pool, hostPort string) *Server {
 		c.Server = server
 		next(rw, r)
 	})
+
+	router.Middleware(func(c *context, rw web.ResponseWriter, r *web.Request, next web.NextMiddlewareFunc) {
+		rw.Header().Add("Access-Control-Allow-Origin", "*")
+		next(rw, r)
+	})
+
 	router.Middleware(func(rw web.ResponseWriter, r *web.Request, next web.NextMiddlewareFunc) {
 		rw.Header().Set("Content-Type", "application/json; charset=utf-8")
 		next(rw, r)
@@ -60,6 +68,7 @@ func NewServer(namespace string, pool *redis.Pool, hostPort string) *Server {
 	router.Post("/delete_all_dead_jobs", (*context).deleteAllDeadJobs)
 	router.Post("/retry_all_dead_jobs", (*context).retryAllDeadJobs)
 	router.Post("/change_namespace/:ns", (*context).changeNamespace)
+	router.Post("/clearWorker/:workerPool_id/:worker_id", (*context).clearWorker)
 
 	//
 	// Build the HTML page:
@@ -73,7 +82,7 @@ func NewServer(namespace string, pool *redis.Pool, hostPort string) *Server {
 		rw.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		rw.Write(assets.MustAsset("work.js"))
 	})
-
+	enqueuer = work.NewEnqueuer(namespace, pool)
 	return server
 }
 
@@ -194,12 +203,22 @@ func (c *context) deleteDeadJob(rw web.ResponseWriter, r *web.Request) {
 	render(rw, map[string]string{"status": "ok"}, err)
 }
 
+func (c *context) clearWorker(rw web.ResponseWriter, r *web.Request) {
+	workerPoolID := fmt.Sprintf("%s", r.PathParams["workerPool_id"])
+	worker := fmt.Sprintf("%s", r.PathParams["worker_id"])
+	jobName := fmt.Sprintf("%s:%s", "WorkerDrain", workerPoolID)
+	_, err := enqueuer.Enqueue(jobName, map[string]interface{}{
+		"worker_id": worker,
+	})
+	render(rw, map[string]string{"status": "ok"}, err)
+}
+
 func (c *context) changeNamespace(rw web.ResponseWriter, r *web.Request) {
 	ns := fmt.Sprint(r.PathParams["ns"])
 
 	c.client = work.NewClient(string(ns), c.pool)
 
-	render(rw, map[string]string{"status": "ok"},nil)
+	render(rw, map[string]string{"status": "ok"}, nil)
 }
 
 func (c *context) retryDeadJob(rw web.ResponseWriter, r *web.Request) {

@@ -98,7 +98,7 @@ func NewWorkerPool(ctx interface{}, concurrency uint, namespace string, pool *re
 		w := newWorker(wp.namespace, wp.workerPoolID, wp.pool, wp.contextType, nil, nil, wp.jobTypes)
 		wp.workers = append(wp.workers, w)
 	}
-	wp.Job(fmt.Sprintf("%s:$s", "WorkerDrain", wp.workerPoolID), wp.workerDrain)
+	wp.Job(fmt.Sprintf("%s:%s", "WorkerDrain", wp.workerPoolID), wp.workerDrain)
 	return wp
 }
 
