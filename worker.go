@@ -107,7 +107,7 @@ func (w *worker) drain() {
 
 func (w *worker) ClearWorker() {
 	w.clearChan <- struct{}{}
-	<-w.doneStoppingChan
+	<-w.doneClearingChan
 }
 
 var sleepBackoffsInMilliseconds = []int64{0, 10, 100, 1000, 5000}
@@ -245,7 +245,7 @@ func (w *worker) processJob(job *Job) {
 			runHook(job, ctx, hook)
 			break
 		case <-w.clearChan:
-			w.doneStoppingChan <- struct{}{}
+			w.doneClearingChan <- struct{}{}
 			break
 		}
 		w.observeDone(job.Name, job.ID, runErr)
