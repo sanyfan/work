@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/garyburd/redigo/redis"
-	"github.com/sanyfan/work"
 )
 
 // ErrNotDeleted is returned by functions that delete jobs to indicate that although the redis commands were successful,
@@ -22,7 +21,7 @@ var ErrNotRetried = fmt.Errorf("nothing retried")
 type Client struct {
 	namespace string
 	pool      *redis.Pool
-	enqueuer  *work.Enqueuer
+	enqueuer  Enqueuer
 }
 
 // NewClient creates a new Client with the specified redis namespace and connection pool.
@@ -30,7 +29,7 @@ func NewClient(namespace string, pool *redis.Pool) *Client {
 	return &Client{
 		namespace: namespace,
 		pool:      pool,
-		enqueuer:  work.NewEnqueuer(namespace, pool),
+		enqueuer:  *NewEnqueuer(namespace, pool),
 	}
 }
 
